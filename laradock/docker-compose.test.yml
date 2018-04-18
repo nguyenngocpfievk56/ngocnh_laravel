@@ -81,6 +81,8 @@ services:
       depends_on:
         - selenium
         - nginx
+      links:
+        - selenium
       command: 'php artisan dusk'
 
 ### PHP-FPM ##############################################
@@ -150,7 +152,7 @@ services:
     selenium:
       build: ./selenium
       ports:
-        - "4444:4444"
+        - "${SELENIUM_PORT}:4444"
       volumes:
         - /dev/shm:/dev/shm
       networks:
