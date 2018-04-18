@@ -421,22 +421,6 @@ RUN if [ ${INSTALL_IMAGEMAGICK} = true ]; then \
 ;fi
 
 ###########################################################################
-# Terraform:
-###########################################################################
-
-USER root
-
-ARG INSTALL_TERRAFORM=false
-
-RUN if [ ${INSTALL_TERRAFORM} = true ]; then \
-    apt-get -y install sudo wget unzip \
-    && wget https://releases.hashicorp.com/terraform/0.10.6/terraform_0.10.6_linux_amd64.zip \
-    && unzip terraform_0.10.6_linux_amd64.zip \
-    && mv terraform /usr/local/bin \
-    && rm terraform_0.10.6_linux_amd64.zip \
-;fi
-
-###########################################################################
 # Dusk Dependencies:
 ###########################################################################
 
