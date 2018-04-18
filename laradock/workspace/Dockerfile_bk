@@ -183,6 +183,42 @@ RUN if [ ${INSTALL_IMAP} = true ]; then \
 ;fi
 
 ###########################################################################
+# xDebug:
+###########################################################################
+
+USER root
+
+ARG INSTALL_XDEBUG=false
+ARG PHP_VERSION=${PHP_VERSION}
+
+RUN if [ ${INSTALL_XDEBUG} = true ]; then \
+    # Load the xdebug extension only with phpunit commands
+    apt-get install -y --force-yes php${PHP_VERSION}-xdebug && \
+    sed -i 's/^;//g' /etc/php/${PHP_VERSION}/cli/conf.d/20-xdebug.ini && \
+    echo "alias phpunit='php -dzend_extension=xdebug.so /var/www/vendor/bin/phpunit'" >> ~/.bashrc \
+;fi
+
+# ADD for REMOTE debugging
+COPY ./xdebug.ini /etc/php/${PHP_VERSION}/cli/conf.d/xdebug.ini
+
+###########################################################################
+# Blackfire:
+###########################################################################
+
+ARG INSTALL_BLACKFIRE=false
+ARG BLACKFIRE_CLIENT_ID
+ENV BLACKFIRE_CLIENT_ID ${BLACKFIRE_CLIENT_ID}
+ARG BLACKFIRE_CLIENT_TOKEN
+ENV BLACKFIRE_CLIENT_TOKEN ${BLACKFIRE_CLIENT_TOKEN}
+
+RUN if [ ${INSTALL_XDEBUG} = false -a ${INSTALL_BLACKFIRE} = true ]; then \
+    curl -L https://packagecloud.io/gpg.key | apt-key add - && \
+    echo "deb http://packages.blackfire.io/debian any main" | tee /etc/apt/sources.list.d/blackfire.list && \
+    apt-get update -yqq && \
+    apt-get install blackfire-agent \
+;fi
+
+###########################################################################
 # ssh:
 ###########################################################################
 
@@ -202,6 +238,95 @@ RUN if [ ${INSTALL_WORKSPACE_SSH} = true ]; then \
     && cp -rf /root/.ssh /home/laradock \
     && chown -R laradock:laradock /home/laradock/.ssh \
 ;fi
+
+###########################################################################
+# MongoDB:
+###########################################################################
+
+ARG INSTALL_MONGO=false
+ARG PHP_VERSION=${PHP_VERSION}
+
+RUN if [ ${INSTALL_MONGO} = true ]; then \
+    # Install the mongodb extension
+    pecl -q install mongodb && \
+    echo "extension=mongodb.so" >> /etc/php/${PHP_VERSION}/mods-available/mongodb.ini && \
+    ln -s /etc/php/${PHP_VERSION}/mods-available/mongodb.ini /etc/php/${PHP_VERSION}/cli/conf.d/30-mongodb.ini \
+;fi
+
+###########################################################################
+# AMQP:
+###########################################################################
+
+ARG INSTALL_AMQP=false
+ARG PHP_VERSION=${PHP_VERSION}
+
+RUN if [ ${INSTALL_AMQP} = true ]; then \
+    apt-get install librabbitmq-dev -y && \
+    pecl -q install amqp && \
+    echo "extension=amqp.so" >> /etc/php/${PHP_VERSION}/mods-available/amqp.ini && \
+    ln -s /etc/php/${PHP_VERSION}/mods-available/amqp.ini /etc/php/${PHP_VERSION}/cli/conf.d/30-amqp.ini \
+;fi
+
+###########################################################################
+# PHP REDIS EXTENSION
+###########################################################################
+
+ARG INSTALL_PHPREDIS=false
+ARG PHP_VERSION=${PHP_VERSION}
+
+RUN if [ ${INSTALL_PHPREDIS} = true ]; then \
+    # Install Php Redis extension
+    printf "\n" | pecl -q install -o -f redis && \
+    echo "extension=redis.so" >> /etc/php/${PHP_VERSION}/mods-available/redis.ini && \
+    phpenmod redis \
+;fi
+
+###########################################################################
+# Swoole EXTENSION
+###########################################################################
+
+ARG INSTALL_SWOOLE=false
+ARG PHP_VERSION=${PHP_VERSION}
+
+RUN if [ ${INSTALL_SWOOLE} = true ]; then \
+    # Install Php Swoole Extension
+    pecl -q install swoole && \
+    echo "extension=swoole.so" >> /etc/php/${PHP_VERSION}/mods-available/swoole.ini && \
+    ln -s /etc/php/${PHP_VERSION}/mods-available/swoole.ini /etc/php/${PHP_VERSION}/cli/conf.d/20-swoole.ini \
+;fi
+
+###########################################################################
+# Drush:
+###########################################################################
+
+USER root
+
+ARG INSTALL_DRUSH=false
+
+RUN if [ ${INSTALL_DRUSH} = true ]; then \
+    apt-get -y install mysql-client && \
+    # Install Drush 8 with the phar file.
+    curl -fsSL -o /usr/local/bin/drush https://github.com/drush-ops/drush/releases/download/${DRUSH_VERSION}/drush.phar | bash && \
+    chmod +x /usr/local/bin/drush && \
+    drush core-status \
+;fi
+
+###########################################################################
+# Drupal Console:
+###########################################################################
+
+USER root
+
+ARG INSTALL_DRUPAL_CONSOLE=false
+
+RUN if [ ${INSTALL_DRUPAL_CONSOLE} = true ]; then \
+    apt-get -y install mysql-client && \
+    curl https://drupalconsole.com/installer -L -o drupal.phar && \
+    mv drupal.phar /usr/local/bin/drupal && \
+    chmod +x /usr/local/bin/drupal \
+;fi
+
+USER laradock
 
 ###########################################################################
 # Node / NVM:
@@ -250,6 +375,36 @@ ENV PATH $PATH:$NVM_DIR/versions/node/v${NODE_VERSION}/bin
 
 RUN if [ ${NPM_REGISTRY} ]; then \
     . ~/.bashrc && npm config set registry ${NPM_REGISTRY} \
+;fi
+
+###########################################################################
+# YARN:
+###########################################################################
+
+USER laradock
+
+ARG INSTALL_YARN=false
+ARG YARN_VERSION=latest
+ENV YARN_VERSION ${YARN_VERSION}
+
+RUN if [ ${INSTALL_YARN} = true ]; then \
+    [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
+    if [ ${YARN_VERSION} = "latest" ]; then \
+        curl -o- -L https://yarnpkg.com/install.sh | bash; \
+    else \
+        curl -o- -L https://yarnpkg.com/install.sh | bash -s -- --version ${YARN_VERSION}; \
+    fi && \
+    echo "" >> ~/.bashrc && \
+    echo 'export PATH="$HOME/.yarn/bin:$PATH"' >> ~/.bashrc \
+;fi
+
+# Add YARN binaries to root's .bashrc
+USER root
+
+RUN if [ ${INSTALL_YARN} = true ]; then \
+    echo "" >> ~/.bashrc && \
+    echo 'export YARN_DIR="/home/laradock/.yarn"' >> ~/.bashrc && \
+    echo 'export PATH="$YARN_DIR/bin:$PATH"' >> ~/.bashrc \
 ;fi
 
 ###########################################################################
@@ -332,6 +487,35 @@ RUN if [ ${INSTALL_LARAVEL_INSTALLER} = true ]; then \
 ;fi
 
 ###########################################################################
+# Deployer:
+###########################################################################
+
+USER root
+
+ARG INSTALL_DEPLOYER=false
+
+RUN if [ ${INSTALL_DEPLOYER} = true ]; then \
+    # Install the Deployer
+    # Using Phar as currently there is no support for laravel 4 from composer version
+    # Waiting to be resolved on https://github.com/deployphp/deployer/issues/1552
+    curl -LO https://deployer.org/deployer.phar && \
+    mv deployer.phar /usr/local/bin/dep && \
+    chmod +x /usr/local/bin/dep \
+;fi
+
+###########################################################################
+# Prestissimo:
+###########################################################################
+USER laradock
+
+ARG INSTALL_PRESTISSIMO=false
+
+RUN if [ ${INSTALL_PRESTISSIMO} = true ]; then \
+    # Install Prestissimo
+    composer global require "hirak/prestissimo" \
+;fi
+
+###########################################################################
 # Linuxbrew:
 ###########################################################################
 
@@ -357,6 +541,59 @@ RUN if [ ${INSTALL_LINUXBREW} = true ]; then \
     echo 'export MANPATH="$LINUXBREWHOME/man:$MANPATH"' >> ~/.bashrc && \
     echo 'export PKG_CONFIG_PATH="$LINUXBREWHOME/lib64/pkgconfig:$LINUXBREWHOME/lib/pkgconfig:$PKG_CONFIG_PATH"' >> ~/.bashrc && \
     echo 'export LD_LIBRARY_PATH="$LINUXBREWHOME/lib64:$LINUXBREWHOME/lib:$LD_LIBRARY_PATH"' >> ~/.bashrc \
+;fi
+
+###########################################################################
+# SQL SERVER:
+###########################################################################
+
+ARG INSTALL_MSSQL=false
+ARG PHP_VERSION=${PHP_VERSION}
+
+RUN set -eux; if [ ${INSTALL_MSSQL} = true ]; then \
+    ###########################################################################
+    #  The following steps were taken from
+    #  https://github.com/Microsoft/msphpsql/wiki/Install-and-configuration
+    ###########################################################################
+    curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
+    curl https://packages.microsoft.com/config/ubuntu/16.04/prod.list > /etc/apt/sources.list.d/mssql-release.list && \
+    apt-get update -yqq && \
+    ACCEPT_EULA=Y apt-get install -yqq msodbcsql=13.0.1.0-1 mssql-tools=14.0.2.0-1 && \
+    apt-get install -yqq unixodbc-dev-utf16 && \
+    ln -sfn /opt/mssql-tools/bin/sqlcmd-13.0.1.0 /usr/bin/sqlcmd && \
+    ln -sfn /opt/mssql-tools/bin/bcp-13.0.1.0 /usr/bin/bcp && \
+    ACCEPT_EULA=Y apt-get install -yqq \
+        unixodbc \
+        unixodbc-dev \
+        libgss3 \
+        odbcinst \
+        msodbcsql \
+        locales && \
+    echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
+    locale-gen && \
+    pecl install sqlsrv-4.3.0 pdo_sqlsrv-4.3.0 && \
+    apt-get install -y locales && \
+    echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
+    locale-gen && \
+    echo "extension=sqlsrv.so"     > /etc/php/${PHP_VERSION}/cli/conf.d/20-sqlsrv.ini && \
+    echo "extension=pdo_sqlsrv.so" > /etc/php/${PHP_VERSION}/cli/conf.d/20-pdo_sqlsrv.ini \
+    && php -m | grep -q 'sqlsrv' \
+    && php -m | grep -q 'pdo_sqlsrv' \
+;fi
+
+###########################################################################
+# Minio:
+###########################################################################
+
+USER root
+
+COPY mc/config.json /root/.mc/config.json
+
+ARG INSTALL_MC=false
+
+RUN if [ ${INSTALL_MC} = true ]; then\
+    curl -fsSL -o /usr/local/bin/mc https://dl.minio.io/client/mc/release/linux-amd64/mc && \
+    chmod +x /usr/local/bin/mc \
 ;fi
 
 ###########################################################################
@@ -434,6 +671,18 @@ RUN if [ ${INSTALL_TERRAFORM} = true ]; then \
     && unzip terraform_0.10.6_linux_amd64.zip \
     && mv terraform /usr/local/bin \
     && rm terraform_0.10.6_linux_amd64.zip \
+;fi
+###########################################################################
+# pgsql client
+###########################################################################
+
+USER root
+
+ARG INSTALL_PG_CLIENT=false
+
+RUN if [ ${INSTALL_PG_CLIENT} = true ]; then \
+    # Install the pgsql client
+    apt-get -y install postgresql-client \
 ;fi
 
 ###########################################################################
