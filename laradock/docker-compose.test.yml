@@ -83,7 +83,6 @@ services:
         - nginx
       links:
         - selenium
-      command: 'php artisan dusk'
 
 ### PHP-FPM ##############################################
     php-fpm:
