@@ -83,6 +83,7 @@ services:
         - nginx
       links:
         - selenium
+      command: 'echo "Ngoc dep trai"'
 
 ### PHP-FPM ##############################################
     php-fpm:
